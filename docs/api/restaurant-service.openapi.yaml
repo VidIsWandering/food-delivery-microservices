@@ -1,0 +1,398 @@
+openapi: 3.0.3
+info:
+  title: Restaurant Service API
+  description: Restaurant listing, menu management with PostgreSQL JSONB. Simplified Layered Architecture.
+  version: 1.0.0
+
+paths:
+  /api/v1/restaurants:
+    get:
+      summary: List/Search restaurants
+      tags: [Restaurants]
+      parameters:
+        - name: cuisine
+          in: query
+          schema:
+            type: string
+          description: Filter by cuisine type (e.g., VIETNAMESE, JAPANESE)
+        - name: lat
+          in: query
+          schema:
+            type: number
+        - name: lng
+          in: query
+          schema:
+            type: number
+        - name: radius
+          in: query
+          schema:
+            type: number
+            default: 5
+          description: Search radius in km
+        - name: q
+          in: query
+          schema:
+            type: string
+          description: Search by name
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: size
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: Restaurant list with pagination
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/RestaurantSummary'
+
+    post:
+      summary: Create a new restaurant
+      tags: [Restaurant Management]
+      security:
+        - bearerAuth: []
+      description: Only RESTAURANT_OWNER role can create.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRestaurantRequest'
+      responses:
+        '201':
+          description: Restaurant created
+        '403':
+          description: Not a restaurant owner
+
+  /api/v1/restaurants/{id}:
+    get:
+      summary: Get restaurant details
+      tags: [Restaurants]
+      parameters:
+        - $ref: '#/components/parameters/RestaurantId'
+      responses:
+        '200':
+          description: Restaurant details
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/Restaurant'
+
+  /api/v1/restaurants/{id}/menu:
+    get:
+      summary: Get full menu for a restaurant
+      tags: [Menu]
+      parameters:
+        - $ref: '#/components/parameters/RestaurantId'
+      responses:
+        '200':
+          description: Menu with categories and items
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/MenuCategory'
+
+    put:
+      summary: Update menu (full replace of categories/items)
+      tags: [Restaurant Management]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/RestaurantId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                categories:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/MenuCategoryInput'
+      responses:
+        '200':
+          description: Menu updated
+
+  /api/v1/restaurants/{id}/status:
+    patch:
+      summary: Open/Close restaurant
+      tags: [Restaurant Management]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/RestaurantId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [is_active]
+              properties:
+                is_active:
+                  type: boolean
+      responses:
+        '200':
+          description: Status updated
+
+  /api/internal/restaurants/{id}/validate-items:
+    post:
+      summary: "[Internal] Validate order items and return verified prices"
+      tags: [Internal]
+      description: Called by Order Service. Validates item availability and returns current prices.
+      parameters:
+        - $ref: '#/components/parameters/RestaurantId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [items]
+              properties:
+                items:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      item_id:
+                        type: string
+                        format: uuid
+                      quantity:
+                        type: integer
+                      selected_options:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            option_name:
+                              type: string
+                            choice_label:
+                              type: string
+      responses:
+        '200':
+          description: Validated items with current prices
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  valid:
+                    type: boolean
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        item_id:
+                          type: string
+                        name:
+                          type: string
+                        unit_price:
+                          type: number
+                        quantity:
+                          type: integer
+                        total:
+                          type: number
+                  subtotal:
+                    type: number
+        '422':
+          description: Items unavailable or restaurant closed
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    RestaurantId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  schemas:
+    RestaurantSummary:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        address_line:
+          type: string
+        cuisine_types:
+          type: array
+          items:
+            type: string
+        avg_rating:
+          type: number
+        is_active:
+          type: boolean
+        image_url:
+          type: string
+
+    Restaurant:
+      allOf:
+        - $ref: '#/components/schemas/RestaurantSummary'
+        - type: object
+          properties:
+            description:
+              type: string
+            lat:
+              type: number
+            lng:
+              type: number
+            operating_hours:
+              type: object
+              additionalProperties:
+                type: object
+                properties:
+                  open:
+                    type: string
+                  close:
+                    type: string
+            total_reviews:
+              type: integer
+
+    CreateRestaurantRequest:
+      type: object
+      required: [name, address_line, lat, lng, operating_hours]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        address_line:
+          type: string
+        lat:
+          type: number
+        lng:
+          type: number
+        cuisine_types:
+          type: array
+          items:
+            type: string
+        operating_hours:
+          type: object
+        image_url:
+          type: string
+
+    MenuCategory:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        sort_order:
+          type: integer
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/MenuItem'
+
+    MenuItem:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+        price:
+          type: number
+        image_url:
+          type: string
+        is_available:
+          type: boolean
+        options:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              choices:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    label:
+                      type: string
+                    price_modifier:
+                      type: number
+
+    MenuCategoryInput:
+      type: object
+      required: [name, items]
+      properties:
+        name:
+          type: string
+        sort_order:
+          type: integer
+        items:
+          type: array
+          items:
+            type: object
+            required: [name, price]
+            properties:
+              name:
+                type: string
+              description:
+                type: string
+              price:
+                type: number
+              image_url:
+                type: string
+              is_available:
+                type: boolean
+                default: true
+              options:
+                type: array
+                items:
+                  type: object
+
+    SuccessResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+        meta:
+          type: object

@@ -1,0 +1,302 @@
+openapi: 3.0.3
+info:
+  title: Order Service API
+  description: Order lifecycle management with state machine. Core business service using Hexagonal Architecture.
+  version: 1.0.0
+
+paths:
+  /api/v1/orders:
+    post:
+      summary: Create a new order
+      tags: [Orders]
+      security:
+        - bearerAuth: []
+      description: |
+        Creates order, validates items via internal REST call to Restaurant Service,
+        saves to DB + writes to outbox_events table (Transactional Outbox Pattern).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOrderRequest'
+      responses:
+        '201':
+          description: Order created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          order_id:
+                            type: string
+                            format: uuid
+                          status:
+                            type: string
+                            example: CREATED
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '422':
+          description: Business error (restaurant closed, item unavailable)
+
+    get:
+      summary: List orders for current user
+      tags: [Orders]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [CREATED, PAYMENT_PENDING, PAID, RESTAURANT_ACCEPTED, PREPARING, READY_FOR_PICKUP, DRIVER_ASSIGNED, PICKED_UP, DELIVERED, CANCELLED]
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: size
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: sort
+          in: query
+          schema:
+            type: string
+            default: created_at,desc
+      responses:
+        '200':
+          description: Order list with pagination
+
+  /api/v1/orders/{id}:
+    get:
+      summary: Get order details
+      tags: [Orders]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+      responses:
+        '200':
+          description: Order details
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/Order'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /api/v1/orders/{id}/cancel:
+    patch:
+      summary: Cancel an order
+      tags: [Orders]
+      security:
+        - bearerAuth: []
+      description: Only allowed when status is CREATED or PAYMENT_PENDING.
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+      responses:
+        '200':
+          description: Order cancelled
+        '409':
+          description: Invalid state transition
+
+  /api/v1/orders/{id}/accept:
+    patch:
+      summary: Restaurant accepts the order
+      tags: [Restaurant Actions]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                estimated_prep_time_minutes:
+                  type: integer
+                  example: 20
+      responses:
+        '200':
+          description: Order accepted
+
+  /api/v1/orders/{id}/ready:
+    patch:
+      summary: Restaurant marks order as ready for pickup
+      tags: [Restaurant Actions]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+      responses:
+        '200':
+          description: Order ready
+
+  /api/internal/orders/{id}:
+    get:
+      summary: "[Internal] Get order details for Dispatch Service"
+      tags: [Internal]
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+      responses:
+        '200':
+          description: Order with restaurant location and customer address
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    OrderId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  schemas:
+    CreateOrderRequest:
+      type: object
+      required: [restaurant_id, items, delivery_address]
+      properties:
+        restaurant_id:
+          type: string
+          format: uuid
+        items:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [item_id, quantity]
+            properties:
+              item_id:
+                type: string
+                format: uuid
+              quantity:
+                type: integer
+                minimum: 1
+              selected_options:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    option_name:
+                      type: string
+                    choice_label:
+                      type: string
+        delivery_address:
+          type: object
+          required: [address_line, lat, lng]
+          properties:
+            address_line:
+              type: string
+            lat:
+              type: number
+            lng:
+              type: number
+        special_instructions:
+          type: string
+
+    Order:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        customer_id:
+          type: string
+          format: uuid
+        restaurant_id:
+          type: string
+          format: uuid
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              item_id:
+                type: string
+              name:
+                type: string
+              quantity:
+                type: integer
+              unit_price:
+                type: number
+              selected_options:
+                type: array
+                items:
+                  type: object
+        delivery_address:
+          type: object
+        subtotal:
+          type: number
+        delivery_fee:
+          type: number
+        total_amount:
+          type: number
+        status:
+          type: string
+          enum: [CREATED, PAYMENT_PENDING, PAID, RESTAURANT_ACCEPTED, PREPARING, READY_FOR_PICKUP, DRIVER_ASSIGNED, PICKED_UP, DELIVERED, CANCELLED]
+        driver_id:
+          type: string
+          format: uuid
+          nullable: true
+        special_instructions:
+          type: string
+          nullable: true
+        estimated_delivery_time:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    SuccessResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+        meta:
+          type: object
+          properties:
+            timestamp:
+              type: string
+              format: date-time
+
+  responses:
+    ValidationError:
+      description: Validation error
+    NotFoundError:
+      description: Resource not found

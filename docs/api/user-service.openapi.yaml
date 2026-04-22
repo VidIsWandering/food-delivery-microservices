@@ -1,0 +1,292 @@
+openapi: 3.0.3
+info:
+  title: User Service API
+  description: Authentication, authorization (JWT), and user profile management.
+  version: 1.0.0
+
+paths:
+  /api/v1/auth/register:
+    post:
+      summary: Register a new user
+      tags: [Authentication]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password, full_name, role]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  minLength: 8
+                full_name:
+                  type: string
+                phone:
+                  type: string
+                role:
+                  type: string
+                  enum: [CUSTOMER, DRIVER, RESTAURANT_OWNER]
+      responses:
+        '201':
+          description: User registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+
+  /api/v1/auth/login:
+    post:
+      summary: Login and receive JWT tokens
+      tags: [Authentication]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          access_token:
+                            type: string
+                          refresh_token:
+                            type: string
+                          expires_in:
+                            type: integer
+                            description: Seconds until access token expires
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /api/v1/auth/refresh:
+    post:
+      summary: Refresh access token
+      tags: [Authentication]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh_token]
+              properties:
+                refresh_token:
+                  type: string
+      responses:
+        '200':
+          description: Token refreshed
+
+  /api/v1/users/me:
+    get:
+      summary: Get current user profile
+      tags: [Users]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: User profile
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/User'
+    put:
+      summary: Update current user profile
+      tags: [Users]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                full_name:
+                  type: string
+                phone:
+                  type: string
+      responses:
+        '200':
+          description: Profile updated
+
+  /api/v1/users/me/addresses:
+    get:
+      summary: List user addresses
+      tags: [Users]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Address list
+    post:
+      summary: Add a new address
+      tags: [Users]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddressInput'
+      responses:
+        '201':
+          description: Address created
+
+  /api/internal/users/{id}:
+    get:
+      summary: "[Internal] Get user by ID"
+      description: Called by Order Service via K8s DNS. Not exposed through Kong.
+      tags: [Internal]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: User data
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+        full_name:
+          type: string
+        phone:
+          type: string
+        role:
+          type: string
+          enum: [CUSTOMER, DRIVER, RESTAURANT_OWNER, ADMIN]
+        is_active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+
+    AddressInput:
+      type: object
+      required: [address_line, lat, lng]
+      properties:
+        label:
+          type: string
+          example: Home
+        address_line:
+          type: string
+        lat:
+          type: number
+          format: double
+        lng:
+          type: number
+          format: double
+        is_default:
+          type: boolean
+
+    SuccessResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+        meta:
+          type: object
+          properties:
+            timestamp:
+              type: string
+              format: date-time
+
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            details:
+              type: array
+              items:
+                type: object
+                properties:
+                  field:
+                    type: string
+                  message:
+                    type: string
+        meta:
+          type: object
+          properties:
+            timestamp:
+              type: string
+              format: date-time
+            trace_id:
+              type: string
+
+  responses:
+    ValidationError:
+      description: Validation error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    UnauthorizedError:
+      description: Authentication required
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFoundError:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'

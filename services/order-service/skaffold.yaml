@@ -1,0 +1,25 @@
+apiVersion: skaffold/v4beta9
+kind: Config
+metadata:
+  name: order-service
+build:
+  artifacts:
+    - image: food-delivery/order-service
+      context: .
+      docker:
+        dockerfile: Dockerfile
+deploy:
+  helm:
+    releases:
+      - name: order-service
+        chartPath: ../../deployments/helm/charts/order-service
+        namespace: food-app
+        setValues:
+          image.repository: food-delivery/order-service
+          image.tag: latest
+portForward:
+  - resourceType: service
+    resourceName: order-service
+    namespace: food-app
+    port: 8080
+    localPort: 8003

@@ -1,0 +1,33 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: food-delivery
+  namespace: argocd
+spec:
+  generators:
+    - list:
+        elements:
+          - service: user-service
+          - service: restaurant-service
+          - service: order-service
+          - service: payment-service
+          - service: dispatch-service
+          - service: notification-service
+  template:
+    metadata:
+      name: '{{service}}'
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/<org>/food-delivery-microservices.git
+        targetRevision: main
+        path: 'deployments/helm/charts/{{service}}'
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: food-app
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true

@@ -1,0 +1,20 @@
+image:
+  repository: acrfooddelivery.azurecr.io/dispatch-service
+  tag: latest
+  pullPolicy: IfNotPresent
+replicaCount: 1
+service:
+  type: ClusterIP
+  port: 8080
+resources:
+  requests: { cpu: 200m, memory: 64Mi }
+  limits: { cpu: 500m, memory: 128Mi }
+env:
+  SERVER_PORT: "8080"
+  REDIS_ADDR: redis-master.databases.svc:6379
+  KAFKA_BROKERS: kafka-0.kafka.svc:9092
+  ORDER_SERVICE_URL: http://order-service.food-app.svc:8080
+  OTEL_SERVICE_NAME: dispatch-service
+probes:
+  liveness: { path: /health/live, initialDelaySeconds: 5, periodSeconds: 10 }
+  readiness: { path: /health/ready, initialDelaySeconds: 5, periodSeconds: 5 }

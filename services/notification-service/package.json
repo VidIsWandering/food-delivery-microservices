@@ -1,0 +1,32 @@
+{
+  "name": "notification-service",
+  "version": "1.0.0",
+  "description": "Real-time notification service for food delivery platform",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx watch src/index.ts",
+    "lint": "eslint src/ --ext .ts",
+    "lint:fix": "eslint src/ --ext .ts --fix",
+    "test": "jest",
+    "test:coverage": "jest --coverage"
+  },
+  "dependencies": {
+    "fastify": "^4.26.0",
+    "kafkajs": "^2.2.4",
+    "pino": "^8.19.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@typescript-eslint/eslint-plugin": "^7.0.0",
+    "@typescript-eslint/parser": "^7.0.0",
+    "eslint": "^8.56.0",
+    "eslint-config-prettier": "^9.1.0",
+    "jest": "^29.7.0",
+    "prettier": "^3.2.0",
+    "ts-jest": "^29.1.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.0"
+  }
+}

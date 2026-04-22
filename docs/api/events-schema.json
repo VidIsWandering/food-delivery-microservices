@@ -1,0 +1,290 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Food Delivery Kafka Event Schemas",
+  "description": "All Kafka events follow CloudEvents specification. This file is the source of truth for event payloads.",
+  "definitions": {
+    "CloudEventEnvelope": {
+      "type": "object",
+      "required": ["id", "source", "type", "time", "datacontenttype", "data"],
+      "properties": {
+        "id": { "type": "string", "format": "uuid", "description": "Unique event ID (for idempotency)" },
+        "source": { "type": "string", "description": "Service name that produced the event" },
+        "type": { "type": "string", "description": "Event type" },
+        "time": { "type": "string", "format": "date-time" },
+        "datacontenttype": { "type": "string", "const": "application/json" },
+        "data": { "type": "object" }
+      }
+    },
+    "OrderCreated": {
+      "description": "Topic: order-events | Producer: Order Service | Consumers: Payment, Notification",
+      "allOf": [
+        { "$ref": "#/definitions/CloudEventEnvelope" },
+        {
+          "properties": {
+            "type": { "const": "OrderCreated" },
+            "source": { "const": "order-service" },
+            "data": {
+              "type": "object",
+              "required": ["order_id", "customer_id", "restaurant_id", "total_amount", "items", "delivery_address"],
+              "properties": {
+                "order_id": { "type": "string", "format": "uuid" },
+                "customer_id": { "type": "string", "format": "uuid" },
+                "restaurant_id": { "type": "string", "format": "uuid" },
+                "total_amount": { "type": "number" },
+                "currency": { "type": "string", "default": "VND" },
+                "items": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "item_id": { "type": "string" },
+                      "name": { "type": "string" },
+                      "quantity": { "type": "integer" },
+                      "unit_price": { "type": "number" }
+                    }
+                  }
+                },
+                "delivery_address": {
+                  "type": "object",
+                  "properties": {
+                    "address_line": { "type": "string" },
+                    "lat": { "type": "number" },
+                    "lng": { "type": "number" }
+                  }
+                },
+                "payment_method": { "type": "string", "enum": ["CREDIT_CARD", "WALLET", "COD"] }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "OrderCancelled": {
+      "description": "Topic: order-events | Producer: Order Service | Consumers: Payment (refund), Notification",
+      "allOf": [
+        { "$ref": "#/definitions/CloudEventEnvelope" },
+        {
+          "properties": {
+            "type": { "const": "OrderCancelled" },
+            "data": {
+              "type": "object",
+              "required": ["order_id", "reason", "cancelled_by"],
+              "properties": {
+                "order_id": { "type": "string", "format": "uuid" },
+                "reason": { "type": "string" },
+                "cancelled_by": { "type": "string", "enum": ["CUSTOMER", "SYSTEM", "RESTAURANT"] }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "PaymentSuccess": {
+      "description": "Topic: payment-events | Producer: Payment Service | Consumers: Order, Restaurant, Notification",
+      "allOf": [
+        { "$ref": "#/definitions/CloudEventEnvelope" },
+        {
+          "properties": {
+            "type": { "const": "PaymentSuccess" },
+            "source": { "const": "payment-service" },
+            "data": {
+              "type": "object",
+              "required": ["order_id", "payment_id", "amount"],
+              "properties": {
+                "order_id": { "type": "string", "format": "uuid" },
+                "payment_id": { "type": "string", "format": "uuid" },
+                "amount": { "type": "number" },
+                "transaction_id": { "type": "string" }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "PaymentFailed": {
+      "description": "Topic: payment-events | Producer: Payment Service | Consumers: Order, Notification",
+      "allOf": [
+        { "$ref": "#/definitions/CloudEventEnvelope" },
+        {
+          "properties": {
+            "type": { "const": "PaymentFailed" },
+            "data": {
+              "type": "object",
+              "required": ["order_id", "payment_id", "failure_reason"],
+              "properties": {
+                "order_id": { "type": "string", "format": "uuid" },
+                "payment_id": { "type": "string", "format": "uuid" },
+                "failure_reason": { "type": "string" }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "PaymentRefunded": {
+      "description": "Topic: payment-events | Producer: Payment Service | Consumers: Notification",
+      "allOf": [
+        { "$ref": "#/definitions/CloudEventEnvelope" },
+        {
+          "properties": {
+            "type": { "const": "PaymentRefunded" },
+            "data": {
+              "type": "object",
+              "required": ["order_id", "payment_id", "refund_amount"],
+              "properties": {
+                "order_id": { "type": "string", "format": "uuid" },
+                "payment_id": { "type": "string", "format": "uuid" },
+                "refund_amount": { "type": "number" }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "OrderAccepted": {
+      "description": "Topic: restaurant-events | Producer: Restaurant Service | Consumers: Order, Notification",
+      "allOf": [
+        { "$ref": "#/definitions/CloudEventEnvelope" },
+        {
+          "properties": {
+            "type": { "const": "OrderAccepted" },
+            "source": { "const": "restaurant-service" },
+            "data": {
+              "type": "object",
+              "required": ["order_id", "restaurant_id"],
+              "properties": {
+                "order_id": { "type": "string", "format": "uuid" },
+                "restaurant_id": { "type": "string", "format": "uuid" },
+                "estimated_prep_time_minutes": { "type": "integer" }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "OrderRejected": {
+      "description": "Topic: restaurant-events | Producer: Restaurant Service | Consumers: Order, Payment (refund), Notification",
+      "allOf": [
+        { "$ref": "#/definitions/CloudEventEnvelope" },
+        {
+          "properties": {
+            "type": { "const": "OrderRejected" },
+            "data": {
+              "type": "object",
+              "required": ["order_id", "restaurant_id", "reason"],
+              "properties": {
+                "order_id": { "type": "string", "format": "uuid" },
+                "restaurant_id": { "type": "string", "format": "uuid" },
+                "reason": { "type": "string" }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "OrderReadyForPickup": {
+      "description": "Topic: restaurant-events | Producer: Restaurant Service | Consumers: Dispatch, Order, Notification",
+      "allOf": [
+        { "$ref": "#/definitions/CloudEventEnvelope" },
+        {
+          "properties": {
+            "type": { "const": "OrderReadyForPickup" },
+            "data": {
+              "type": "object",
+              "required": ["order_id", "restaurant_id", "restaurant_lat", "restaurant_lng"],
+              "properties": {
+                "order_id": { "type": "string", "format": "uuid" },
+                "restaurant_id": { "type": "string", "format": "uuid" },
+                "restaurant_lat": { "type": "number" },
+                "restaurant_lng": { "type": "number" }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "DriverAssigned": {
+      "description": "Topic: delivery-events | Producer: Dispatch Service | Consumers: Order, Notification",
+      "allOf": [
+        { "$ref": "#/definitions/CloudEventEnvelope" },
+        {
+          "properties": {
+            "type": { "const": "DriverAssigned" },
+            "source": { "const": "dispatch-service" },
+            "data": {
+              "type": "object",
+              "required": ["order_id", "driver_id", "driver_name", "driver_phone"],
+              "properties": {
+                "order_id": { "type": "string", "format": "uuid" },
+                "driver_id": { "type": "string", "format": "uuid" },
+                "driver_name": { "type": "string" },
+                "driver_phone": { "type": "string" },
+                "estimated_arrival_minutes": { "type": "integer" }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "DriverPickedUp": {
+      "description": "Topic: delivery-events | Producer: Dispatch Service | Consumers: Order, Notification",
+      "allOf": [
+        { "$ref": "#/definitions/CloudEventEnvelope" },
+        {
+          "properties": {
+            "type": { "const": "DriverPickedUp" },
+            "data": {
+              "type": "object",
+              "required": ["order_id", "driver_id"],
+              "properties": {
+                "order_id": { "type": "string", "format": "uuid" },
+                "driver_id": { "type": "string", "format": "uuid" },
+                "picked_up_at": { "type": "string", "format": "date-time" }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "OrderDelivered": {
+      "description": "Topic: delivery-events | Producer: Dispatch Service | Consumers: Order, Notification",
+      "allOf": [
+        { "$ref": "#/definitions/CloudEventEnvelope" },
+        {
+          "properties": {
+            "type": { "const": "OrderDelivered" },
+            "data": {
+              "type": "object",
+              "required": ["order_id", "driver_id", "delivered_at"],
+              "properties": {
+                "order_id": { "type": "string", "format": "uuid" },
+                "driver_id": { "type": "string", "format": "uuid" },
+                "delivered_at": { "type": "string", "format": "date-time" }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "DispatchFailed": {
+      "description": "Topic: delivery-events | Producer: Dispatch Service | Consumers: Order, Payment (refund), Notification",
+      "allOf": [
+        { "$ref": "#/definitions/CloudEventEnvelope" },
+        {
+          "properties": {
+            "type": { "const": "DispatchFailed" },
+            "data": {
+              "type": "object",
+              "required": ["order_id", "reason"],
+              "properties": {
+                "order_id": { "type": "string", "format": "uuid" },
+                "reason": { "type": "string" },
+                "retry_count": { "type": "integer" }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,23 @@
+# CODEOWNERS - Auto-assign reviewers based on file paths
+# See: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Java services → SWE Java
+services/user-service/       @java-swe
+services/restaurant-service/ @java-swe
+services/order-service/       @java-swe
+services/payment-service/     @java-swe
+
+# Go & Node.js services → DevOps/SWE
+services/dispatch-service/      @devops-swe
+services/notification-service/  @devops-swe
+
+# Deployments & Infrastructure → DevOps/SWE
+deployments/  @devops-swe
+.github/      @devops-swe
+scripts/      @devops-swe
+
+# Documentation → Both
+docs/         @java-swe @devops-swe
+
+# API Contracts → Both (breaking changes need both approvals)
+docs/api/     @java-swe @devops-swe

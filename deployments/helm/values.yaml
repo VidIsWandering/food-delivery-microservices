@@ -1,0 +1,13 @@
+# Default values for all services (can be overridden per-environment)
+global:
+  image:
+    registry: acrfooddelivery.azurecr.io
+  postgresql:
+    host: postgresql.databases.svc
+    port: 5432
+    username: postgres
+  redis:
+    host: redis-master.databases.svc
+    port: 6379
+  kafka:
+    bootstrapServers: kafka-0.kafka.svc:9092

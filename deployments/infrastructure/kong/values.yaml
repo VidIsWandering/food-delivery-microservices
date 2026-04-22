@@ -1,0 +1,13 @@
+# Kong Ingress Controller Helm values
+gateway:
+  service:
+    type: NodePort
+  env:
+    plugins: "bundled,prometheus,opentelemetry"
+  resources:
+    requests:
+      cpu: 300m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Structured JSON logging for all Java services.
+     Outputs JSON to stdout for Loki/Fluentd ingestion.
+     See: docs/operations/MONITORING_GUIDE.md#5-structured-logging-standard -->
+<configuration>
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+            <customFields>{"service":"${spring.application.name:-unknown}"}</customFields>
+            <fieldNames>
+                <timestamp>timestamp</timestamp>
+                <level>level</level>
+                <message>message</message>
+                <logger>logger</logger>
+                <thread>thread</thread>
+            </fieldNames>
+            <!-- Include MDC fields: trace_id, span_id are auto-populated by Micrometer Tracing -->
+            <includeMdcKeyName>trace_id</includeMdcKeyName>
+            <includeMdcKeyName>span_id</includeMdcKeyName>
+        </encoder>
+    </appender>
+
+    <root level="INFO">
+        <appender-ref ref="CONSOLE" />
+    </root>
+</configuration>

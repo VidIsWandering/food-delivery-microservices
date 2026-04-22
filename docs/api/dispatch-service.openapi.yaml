@@ -1,0 +1,152 @@
+openapi: 3.0.3
+info:
+  title: Dispatch Service API
+  description: Real-time driver tracking and matching. Built with Go + Redis Geospatial.
+  version: 1.0.0
+
+paths:
+  /api/v1/delivery/{orderId}:
+    get:
+      summary: Get delivery status and driver location
+      tags: [Delivery]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Delivery status with driver location
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/DeliveryStatus'
+        '404':
+          description: No active delivery for this order
+
+  /api/v1/delivery/{orderId}/pickup:
+    patch:
+      summary: Driver confirms pickup
+      tags: [Driver Actions]
+      security:
+        - bearerAuth: []
+      description: Only the assigned DRIVER can call this.
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Pickup confirmed, publishes DriverPickedUp event
+        '403':
+          description: Not the assigned driver
+        '409':
+          description: Order not in DRIVER_ASSIGNED status
+
+  /api/v1/delivery/{orderId}/deliver:
+    patch:
+      summary: Driver confirms delivery
+      tags: [Driver Actions]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Delivery confirmed, publishes OrderDelivered event
+
+  /ws/driver/location:
+    get:
+      summary: WebSocket endpoint for driver GPS streaming
+      tags: [WebSocket]
+      description: |
+        Bidirectional WebSocket connection. Driver sends GPS coordinates every 5 seconds.
+
+        **Authentication:** JWT token passed as query parameter `?token=xxx`
+
+        **Client → Server message format:**
+        ```json
+        {"lat": 10.773, "lng": 106.702, "timestamp": "2026-04-22T08:00:00Z"}
+        ```
+
+        **Server → Client message format:**
+        ```json
+        {"type": "new_order", "order_id": "ord-123", "restaurant": {"lat": 10.77, "lng": 106.70}}
+        ```
+
+        Server stores location via `GEOADD active_drivers {lng} {lat} {driver_id}` in Redis.
+      responses:
+        '101':
+          description: WebSocket upgrade successful
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    DeliveryStatus:
+      type: object
+      properties:
+        order_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [SEARCHING_DRIVER, DRIVER_ASSIGNED, PICKED_UP, DELIVERING, DELIVERED, FAILED]
+        driver:
+          type: object
+          nullable: true
+          properties:
+            id:
+              type: string
+              format: uuid
+            name:
+              type: string
+            phone:
+              type: string
+            vehicle_type:
+              type: string
+            current_location:
+              type: object
+              properties:
+                lat:
+                  type: number
+                lng:
+                  type: number
+            last_updated:
+              type: string
+              format: date-time
+        estimated_delivery_time:
+          type: string
+          format: date-time
+          nullable: true
+
+    SuccessResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+        meta:
+          type: object

@@ -1,0 +1,25 @@
+apiVersion: v2
+name: food-delivery
+description: Umbrella Helm chart for Food Delivery Microservices
+version: 0.1.0
+appVersion: "1.0.0"
+
+dependencies:
+  - name: user-service
+    version: 0.1.0
+    repository: file://charts/user-service
+  - name: restaurant-service
+    version: 0.1.0
+    repository: file://charts/restaurant-service
+  - name: order-service
+    version: 0.1.0
+    repository: file://charts/order-service
+  - name: payment-service
+    version: 0.1.0
+    repository: file://charts/payment-service
+  - name: dispatch-service
+    version: 0.1.0
+    repository: file://charts/dispatch-service
+  - name: notification-service
+    version: 0.1.0
+    repository: file://charts/notification-service

@@ -1,0 +1,78 @@
+name: CI - Go Services
+on:
+  pull_request:
+    paths:
+      - 'services/dispatch-service/**'
+  push:
+    branches: [main]
+    paths:
+      - 'services/dispatch-service/**'
+
+env:
+  GO_VERSION: '1.22'
+  REGISTRY: acrfooddelivery.azurecr.io
+  SERVICE: dispatch-service
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: services/${{ env.SERVICE }}/go.sum
+
+      - name: Lint (golangci-lint)
+        uses: golangci/golangci-lint-action@v4
+        with:
+          working-directory: services/${{ env.SERVICE }}
+
+      - name: Unit Tests
+        working-directory: services/${{ env.SERVICE }}
+        run: go test -race -coverprofile=coverage.out ./...
+
+      - name: Upload Coverage
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: go-coverage
+          path: services/${{ env.SERVICE }}/coverage.out
+
+      - name: Build Docker Image
+        working-directory: services/${{ env.SERVICE }}
+        run: docker build -t ${{ env.REGISTRY }}/${{ env.SERVICE }}:${{ github.sha }} .
+
+      - name: Security Scan (Trivy)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.SERVICE }}:${{ github.sha }}
+          format: 'table'
+          exit-code: '1'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Push to ACR
+        if: github.ref == 'refs/heads/main'
+        run: |
+          az acr login --name acrfooddelivery
+          docker push ${{ env.REGISTRY }}/${{ env.SERVICE }}:${{ github.sha }}
+          docker tag ${{ env.REGISTRY }}/${{ env.SERVICE }}:${{ github.sha }} ${{ env.REGISTRY }}/${{ env.SERVICE }}:latest
+          docker push ${{ env.REGISTRY }}/${{ env.SERVICE }}:latest
+
+  update-helm:
+    needs: build-test
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Update Helm values
+        run: yq e ".image.tag = \"${{ github.sha }}\"" -i deployments/helm/charts/${{ env.SERVICE }}/values.yaml
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add deployments/helm/
+          git commit -m "chore(ci): update dispatch-service image to ${{ github.sha }}" || exit 0
+          git push

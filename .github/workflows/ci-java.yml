@@ -1,0 +1,106 @@
+name: CI - Java Services
+on:
+  pull_request:
+    paths:
+      - 'services/user-service/**'
+      - 'services/restaurant-service/**'
+      - 'services/order-service/**'
+      - 'services/payment-service/**'
+  push:
+    branches: [main]
+    paths:
+      - 'services/user-service/**'
+      - 'services/restaurant-service/**'
+      - 'services/order-service/**'
+      - 'services/payment-service/**'
+
+env:
+  JAVA_VERSION: '21'
+  REGISTRY: acrfooddelivery.azurecr.io
+
+jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      services: ${{ steps.changes.outputs.services }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: changes
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            user-service:
+              - 'services/user-service/**'
+            restaurant-service:
+              - 'services/restaurant-service/**'
+            order-service:
+              - 'services/order-service/**'
+            payment-service:
+              - 'services/payment-service/**'
+
+  build-test:
+    needs: detect-changes
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [user-service, restaurant-service, order-service, payment-service]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: 'maven'
+
+      - name: Lint (Checkstyle)
+        working-directory: services/${{ matrix.service }}
+        run: mvn checkstyle:check -q
+
+      - name: Unit Tests
+        working-directory: services/${{ matrix.service }}
+        run: mvn test -q
+
+      - name: Integration Tests (Testcontainers)
+        working-directory: services/${{ matrix.service }}
+        run: mvn verify -P integration-test -q
+
+      - name: Build Docker Image
+        working-directory: services/${{ matrix.service }}
+        run: docker build -t ${{ env.REGISTRY }}/${{ matrix.service }}:${{ github.sha }} .
+
+      - name: Security Scan (Trivy)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ matrix.service }}:${{ github.sha }}
+          format: 'table'
+          exit-code: '1'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Push to ACR
+        if: github.ref == 'refs/heads/main'
+        run: |
+          az acr login --name acrfooddelivery
+          docker push ${{ env.REGISTRY }}/${{ matrix.service }}:${{ github.sha }}
+          docker tag ${{ env.REGISTRY }}/${{ matrix.service }}:${{ github.sha }} ${{ env.REGISTRY }}/${{ matrix.service }}:latest
+          docker push ${{ env.REGISTRY }}/${{ matrix.service }}:latest
+
+  update-helm:
+    needs: build-test
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Update Helm values with new image tag
+        run: |
+          for svc in user-service restaurant-service order-service payment-service; do
+            yq e ".image.tag = \"${{ github.sha }}\"" -i deployments/helm/charts/${svc}/values.yaml
+          done
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add deployments/helm/
+          git commit -m "chore(ci): update Java service images to ${{ github.sha }}" || exit 0
+          git push

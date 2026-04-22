@@ -1,0 +1,18 @@
+#!/bin/sh
+# Maven Wrapper - downloads and runs Apache Maven
+# See: https://maven.apache.org/wrapper/
+set -e
+WRAPPER_JAR=".mvn/wrapper/maven-wrapper.jar"
+WRAPPER_PROPERTIES=".mvn/wrapper/maven-wrapper.properties"
+MAVEN_HOME="${HOME}/.m2/wrapper/dists/apache-maven-3.9.6"
+
+if [ ! -d "$MAVEN_HOME" ]; then
+  echo "Downloading Maven 3.9.6..."
+  DIST_URL=$(grep distributionUrl "$WRAPPER_PROPERTIES" | cut -d'=' -f2-)
+  mkdir -p "$MAVEN_HOME"
+  curl -fsSL "$DIST_URL" -o /tmp/maven.zip
+  unzip -q /tmp/maven.zip -d "${HOME}/.m2/wrapper/dists/"
+  rm /tmp/maven.zip
+fi
+
+exec "${MAVEN_HOME}/bin/mvn" "$@"

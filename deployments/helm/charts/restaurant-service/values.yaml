@@ -1,0 +1,21 @@
+image:
+  repository: acrfooddelivery.azurecr.io/restaurant-service
+  tag: latest
+  pullPolicy: IfNotPresent
+replicaCount: 1
+service:
+  type: ClusterIP
+  port: 8080
+resources:
+  requests: { cpu: 200m, memory: 256Mi }
+  limits: { cpu: 500m, memory: 512Mi }
+env:
+  SPRING_DATASOURCE_URL: jdbc:postgresql://postgresql.databases.svc:5432/restaurant_db
+  SPRING_DATASOURCE_USERNAME: postgres
+  SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka-0.kafka.svc:9092
+  OTEL_SERVICE_NAME: restaurant-service
+secretEnv:
+  SPRING_DATASOURCE_PASSWORD: { secretName: db-credentials, key: POSTGRES_PASSWORD }
+probes:
+  liveness: { path: /health/live, initialDelaySeconds: 30, periodSeconds: 10 }
+  readiness: { path: /health/ready, initialDelaySeconds: 20, periodSeconds: 5 }

@@ -1,0 +1,121 @@
+openapi: 3.0.3
+info:
+  title: Payment Service API
+  description: Payment processing and refund management. Hexagonal Architecture with swappable payment gateway adapters.
+  version: 1.0.0
+
+paths:
+  /api/v1/payments/{orderId}:
+    get:
+      summary: Get payment status for an order
+      tags: [Payments]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Payment details
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/Payment'
+        '404':
+          description: Payment not found
+
+  /api/v1/payments/{id}/refund:
+    post:
+      summary: Manually initiate a refund (Admin only)
+      tags: [Payments]
+      security:
+        - bearerAuth: []
+      description: "Requires ADMIN role. Note: Automated refunds are triggered by Kafka events (OrderRejected, DispatchFailed)."
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason:
+                  type: string
+                amount:
+                  type: number
+                  description: Partial refund amount. If omitted, full refund.
+      responses:
+        '200':
+          description: Refund initiated
+        '409':
+          description: Payment already refunded or not in SUCCESS state
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    Payment:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        order_id:
+          type: string
+          format: uuid
+        customer_id:
+          type: string
+          format: uuid
+        amount:
+          type: number
+        currency:
+          type: string
+          example: VND
+        method:
+          type: string
+          enum: [CREDIT_CARD, WALLET, COD]
+        status:
+          type: string
+          enum: [PENDING, PROCESSING, SUCCESS, FAILED, REFUNDED]
+        provider_transaction_id:
+          type: string
+          nullable: true
+        failure_reason:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    SuccessResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+        meta:
+          type: object

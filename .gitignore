@@ -1,0 +1,90 @@
+# ========================
+# Java / Maven
+# ========================
+*.class
+*.jar
+*.war
+*.ear
+target/
+!.mvn/wrapper/maven-wrapper.jar
+.mvn/wrapper/maven-wrapper.jar
+*.log
+
+# ========================
+# Go
+# ========================
+/dispatch-service
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+vendor/
+
+# ========================
+# Node.js
+# ========================
+node_modules/
+dist/
+build/
+*.tsbuildinfo
+.npm
+.eslintcache
+
+# ========================
+# Python
+# ========================
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+venv/
+.venv/
+
+# ========================
+# IDE
+# ========================
+.idea/
+*.iml
+*.iws
+.vscode/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+
+# ========================
+# OS
+# ========================
+.DS_Store
+Thumbs.db
+*.tmp
+
+# ========================
+# Docker
+# ========================
+.docker/
+
+# ========================
+# Environment & Secrets
+# ========================
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# ========================
+# Coverage & Reports
+# ========================
+coverage/
+*.lcov
+htmlcov/
+.nyc_output/
+surefire-reports/
+jacoco/

@@ -1,0 +1,18 @@
+# Redis Helm values (Bitnami chart)
+# Single master, no replicas (sufficient for development and staging)
+auth:
+  enabled: false
+
+master:
+  persistence:
+    size: 500Mi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 64Mi
+    limits:
+      cpu: 250m
+      memory: 128Mi
+
+replica:
+  replicaCount: 0

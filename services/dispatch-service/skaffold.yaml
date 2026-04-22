@@ -1,0 +1,25 @@
+apiVersion: skaffold/v4beta9
+kind: Config
+metadata:
+  name: dispatch-service
+build:
+  artifacts:
+    - image: food-delivery/dispatch-service
+      context: .
+      docker:
+        dockerfile: Dockerfile
+deploy:
+  helm:
+    releases:
+      - name: dispatch-service
+        chartPath: ../../deployments/helm/charts/dispatch-service
+        namespace: food-app
+        setValues:
+          image.repository: food-delivery/dispatch-service
+          image.tag: latest
+portForward:
+  - resourceType: service
+    resourceName: dispatch-service
+    namespace: food-app
+    port: 8080
+    localPort: 8005
