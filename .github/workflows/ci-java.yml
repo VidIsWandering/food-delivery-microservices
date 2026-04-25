@@ -94,6 +94,7 @@ jobs:
 
       - name: Push to ACR
         if: github.ref == 'refs/heads/main'
+        continue-on-error: true
         run: |
           az acr login --name acrfooddelivery
           docker push ${{ env.REGISTRY }}/${{ matrix.service }}:${{ github.sha }}
