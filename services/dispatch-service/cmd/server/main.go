@@ -11,6 +11,7 @@ import (
 
 	"github.com/food-delivery/dispatch-service/internal/config"
 	"github.com/food-delivery/dispatch-service/internal/handler"
+	"github.com/food-delivery/dispatch-service/internal/kafka"
 	"github.com/food-delivery/dispatch-service/internal/matching"
 	"github.com/food-delivery/dispatch-service/internal/repository"
 	"github.com/food-delivery/dispatch-service/internal/service"
@@ -23,16 +24,36 @@ func main() {
 
 	// Load configuration
 	cfg := config.Load()
-	slog.Info("Starting dispatch-service", "port", cfg.ServerPort)
+	slog.Info("Starting dispatch-service",
+		"port", cfg.ServerPort,
+		"redis", cfg.RedisAddr,
+		"kafka_brokers", cfg.KafkaBrokers,
+	)
 
 	// Initialize dependencies
 	driverRepo := repository.NewRedisDriverRepository(cfg.RedisAddr)
 	matcher := matching.NewMatcher()
-	dispatchSvc := service.NewDispatchService(driverRepo, matcher)
+	kafkaProducer := kafka.NewProducer(cfg.KafkaBrokers)
+
+	dispatchSvc := service.NewDispatchService(
+		driverRepo,
+		matcher,
+		kafkaProducer,
+		cfg.MatchRadiusKm,
+		cfg.MatchRetryInterval,
+		cfg.MatchMaxRetries,
+	)
+
+	// Start Kafka consumer in background
+	kafkaConsumer := kafka.NewConsumer(cfg.KafkaBrokers, cfg.KafkaGroupID, dispatchSvc)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	go kafkaConsumer.Start(ctx)
 
 	// Setup HTTP handlers
 	mux := http.NewServeMux()
-	handler.RegisterRoutes(mux, dispatchSvc)
+	handler.RegisterRoutes(mux, dispatchSvc, driverRepo)
 
 	// Health check endpoints
 	mux.HandleFunc("GET /health/live", func(w http.ResponseWriter, r *http.Request) {
@@ -42,17 +63,26 @@ func main() {
 		}
 	})
 	mux.HandleFunc("GET /health/ready", func(w http.ResponseWriter, r *http.Request) {
-		// TODO: check Redis connectivity
+		if err := driverRepo.Ping(r.Context()); err != nil {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			if _, wErr := w.Write([]byte(`{"status":"NOT_READY","reason":"redis_unavailable"}`)); wErr != nil {
+				slog.Error("failed to write readiness response", "error", wErr)
+			}
+			return
+		}
 		w.WriteHeader(http.StatusOK)
 		if _, err := w.Write([]byte(`{"status":"READY"}`)); err != nil {
 			slog.Error("failed to write readiness response", "error", err)
 		}
 	})
 
+	// Wrap with logging middleware
+	loggedMux := handler.LoggingMiddleware(mux)
+
 	// Start server with graceful shutdown
 	server := &http.Server{
 		Addr:         ":" + cfg.ServerPort,
-		Handler:      mux,
+		Handler:      loggedMux,
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 15 * time.Second,
 		IdleTimeout:  60 * time.Second,
@@ -72,11 +102,22 @@ func main() {
 	<-quit
 
 	slog.Info("Shutting down server...")
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+	cancel() // Stop Kafka consumer
 
-	if err := server.Shutdown(ctx); err != nil {
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer shutdownCancel()
+
+	if err := server.Shutdown(shutdownCtx); err != nil {
 		slog.Error("Server forced shutdown", "error", err)
+	}
+	if err := kafkaConsumer.Close(); err != nil {
+		slog.Error("Failed to close Kafka consumer", "error", err)
+	}
+	if err := kafkaProducer.Close(); err != nil {
+		slog.Error("Failed to close Kafka producer", "error", err)
+	}
+	if err := driverRepo.Close(); err != nil {
+		slog.Error("Failed to close Redis", "error", err)
 	}
 	slog.Info("Server stopped")
 }
