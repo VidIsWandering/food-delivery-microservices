@@ -4,11 +4,12 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/food-delivery/dispatch-service/internal/repository"
 	"github.com/food-delivery/dispatch-service/internal/service"
 )
 
-// RegisterRoutes registers all HTTP handlers for the dispatch service.
-func RegisterRoutes(mux *http.ServeMux, svc *service.DispatchService) {
+// RegisterRoutes registers all HTTP and WebSocket handlers for the dispatch service.
+func RegisterRoutes(mux *http.ServeMux, svc *service.DispatchService, driverRepo *repository.RedisDriverRepository) {
 	h := &dispatchHandler{svc: svc}
 
 	// Public REST endpoints
@@ -17,8 +18,8 @@ func RegisterRoutes(mux *http.ServeMux, svc *service.DispatchService) {
 	mux.HandleFunc("PATCH /api/v1/delivery/{orderId}/deliver", h.confirmDelivery)
 
 	// WebSocket endpoint for driver GPS streaming
-	// TODO: implement WebSocket handler
-	// mux.HandleFunc("/ws/driver/location", h.handleDriverWS)
+	ws := newWSHandler(driverRepo)
+	mux.HandleFunc("/ws/driver/location", ws.handleDriverWS)
 }
 
 type dispatchHandler struct {
@@ -48,6 +49,11 @@ func (h *dispatchHandler) confirmPickup(w http.ResponseWriter, r *http.Request) 
 	orderId := r.PathValue("orderId")
 	driverId := r.Header.Get("X-User-Id") // Injected by Kong
 
+	if driverId == "" {
+		writeError(w, http.StatusUnauthorized, "DRIVER_ID_REQUIRED", "X-User-Id header is required")
+		return
+	}
+
 	if err := h.svc.ConfirmPickup(r.Context(), orderId, driverId); err != nil {
 		writeError(w, http.StatusConflict, "PICKUP_FAILED", err.Error())
 		return
@@ -62,6 +68,11 @@ func (h *dispatchHandler) confirmPickup(w http.ResponseWriter, r *http.Request) 
 func (h *dispatchHandler) confirmDelivery(w http.ResponseWriter, r *http.Request) {
 	orderId := r.PathValue("orderId")
 	driverId := r.Header.Get("X-User-Id")
+
+	if driverId == "" {
+		writeError(w, http.StatusUnauthorized, "DRIVER_ID_REQUIRED", "X-User-Id header is required")
+		return
+	}
 
 	if err := h.svc.ConfirmDelivery(r.Context(), orderId, driverId); err != nil {
 		writeError(w, http.StatusConflict, "DELIVERY_FAILED", err.Error())
