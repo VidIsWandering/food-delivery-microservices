@@ -60,11 +60,15 @@ func (r *RedisDriverRepository) UpdateDriverLocation(ctx context.Context, driver
 // GetNearbyDrivers returns drivers within radiusKm of the center point.
 // Uses Redis GEORADIUS sorted by distance ASC.
 func (r *RedisDriverRepository) GetNearbyDrivers(ctx context.Context, center domain.Location, radiusKm float64) ([]domain.Driver, error) {
-	results, err := r.client.GeoRadius(ctx, activeDriversKey, center.Lng, center.Lat, &redis.GeoRadiusQuery{
-		Radius:    radiusKm,
-		Unit:      "km",
-		Sort:      "ASC",
-		Count:     10,
+	results, err := r.client.GeoSearchLocation(ctx, activeDriversKey, &redis.GeoSearchLocationQuery{
+		GeoSearchQuery: redis.GeoSearchQuery{
+			Longitude:  center.Lng,
+			Latitude:   center.Lat,
+			Radius:     radiusKm,
+			RadiusUnit: "km",
+			Sort:       "ASC",
+			Count:      10,
+		},
 		WithCoord: true,
 	}).Result()
 	if err != nil {
