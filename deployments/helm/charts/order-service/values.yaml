@@ -1,6 +1,6 @@
 image:
   repository: acrfooddelivery.azurecr.io/order-service
-  tag: 9c8c6621f6a9c2391e93aa7d039ca448bb8c9c37
+  tag: bbac661258bf8ef919c36c049525444f6f925a18
   pullPolicy: IfNotPresent
 replicaCount: 1
 service:
