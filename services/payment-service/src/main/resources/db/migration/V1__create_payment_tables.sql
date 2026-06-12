@@ -1,4 +1,4 @@
--- Payment Service: Initial schema
+-- Flyway Migration: V1__create_payment_tables
 CREATE TABLE payments (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     order_id UUID NOT NULL UNIQUE,
@@ -20,6 +20,12 @@ CREATE TABLE refunds (
     reason TEXT,
     status VARCHAR(20) DEFAULT 'PENDING',
     created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE processed_events (
+    id VARCHAR(255) PRIMARY KEY,
+    event_type VARCHAR(255) NOT NULL,
+    processed_at TIMESTAMP DEFAULT NOW()
 );
 
 CREATE INDEX idx_payments_order ON payments(order_id);
