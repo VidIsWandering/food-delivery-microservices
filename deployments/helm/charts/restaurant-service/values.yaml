@@ -1,6 +1,6 @@
 image:
   repository: acrfooddelivery.azurecr.io/restaurant-service
-  tag: f4342c39e78f009dabfbec3d194af8abbce0f84e
+  tag: e2a8e64519163796cb6f066bddab5335dacbe428
   pullPolicy: IfNotPresent
 replicaCount: 1
 service:
